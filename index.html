@@ -326,12 +326,12 @@ function demoTick(ts){
   requestAnimationFrame(demoTick);
 }
 function startDemo(){
-  demo=true; demoT0=0; setGhost(false); loadScene(0);
+  demo=true; stage.dataset.demo="on"; demoT0=0; setGhost(false); loadScene(0);
   if(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches) sweepDraw(.5);   // still frame, split down the middle
   else requestAnimationFrame(demoTick);
 }
 // ending the demo leaves the example on screen, fully sanitized and ready to edit
-function stopDemo(){ demoOff=true; if(!demo)return; demo=false; setGhost(false); render() }
+function stopDemo(){ demoOff=true; if(!demo)return; demo=false; stage.dataset.demo="off"; setGhost(false); render() }
 function render(){ if(demo||raf)return; raf=requestAnimationFrame(function(){raf=0;rebuildSubject();paint(sctx,ghost)}) }
 function setImage(w,h){ [stage,orig,mask,subj].forEach(function(c){size(c,w,h)}); stage.style.maxWidth="calc(70vh * "+(w/h).toFixed(4)+")"; undoStack=[]; $("undo").disabled=true }
 function snapshotAuto(){ autoMask=document.createElement("canvas"); size(autoMask,mask.width,mask.height); autoMask.getContext("2d").drawImage(mask,0,0) }
@@ -561,10 +561,12 @@ function addScene(photo,maskFile,type,m,first){
 }
 addScene("example.jpg","example-mask.png","sweep",meta,true);
 addScene("surf.jpg","surf-mask.png","brush",{example:true,lat:13.8421,latR:"S",lon:171.7513,lonR:"W",date:"2026:08:14 07:05:52",make:"Example",model:"Phone",name:"secret-reef-barrel.jpg"},false);
-// touching any control ends the demo and hands over the example for editing
+// using a control ends the demo and hands over the example for editing
+// only a real control does this: a button, the brush slider, the colour picker or the checkbox.
+// Touching or scrolling anywhere else, the photo included, leaves the demo running.
 var side=document.querySelector(".side");
-["pointerdown","keydown"].forEach(function(n){side.addEventListener(n,stopDemo,true)});
-stage.addEventListener("pointerdown",stopDemo,true);
+function onControl(e){ if(e.target.closest&&e.target.closest("button,input")) stopDemo() }
+["click","input","change"].forEach(function(n){side.addEventListener(n,onControl,true)});
 var enginePromise=loadEngine().then(function(){
   if(engine==="ready")setStatus("Ready. Choose a photo to try it on your own.","ok");
   else setStatus("Automatic cutout isn't available here. You can still paint the cutout by hand.","warn");
