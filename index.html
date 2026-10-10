@@ -15,18 +15,14 @@
 <style>
 /* Layout: a chart table. Photo on the left inside a chart neatline, the working log on the right; stacks on a phone. */
 :root{
-  --logo-bg:#000000; --paper:#E8EEF0; --panel:#F6F9FA; --ink:#12263A; --muted:#51667A; --line:#C3D0D8;
-  --shoal:#BBDDEA; --magenta:#A81C68; --on-magenta:#FFFFFF; --ok:#1F6B4E; --warn:#8A5A00;
+  /* one look, set by the logo: white on black */
+  --logo-bg:#000000; --paper:#000000; --panel:#0F1113; --ink:#FFFFFF; --muted:#B4BAC0; --line:#2C3035;
+  --shoal:#22272C; --magenta:#EE6DB0; --on-magenta:#1A0A13; --ok:#7BD8AE; --warn:#EBBC62;
   --display:"Familjen Grotesk","Trebuchet MS",sans-serif;
   --body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
 }
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --paper:#0C1722; --panel:#13222F; --ink:#DCE7EC; --muted:#93A7B6; --line:#2A3D4D;
-  --shoal:#1D4257; --magenta:#EE6DB0; --on-magenta:#1A0A13; --ok:#6FCFA6; --warn:#E3B45A; color-scheme:dark } }
-:root[data-theme="dark"]{
-  --paper:#0C1722; --panel:#13222F; --ink:#DCE7EC; --muted:#93A7B6; --line:#2A3D4D;
-  --shoal:#1D4257; --magenta:#EE6DB0; --on-magenta:#1A0A13; --ok:#6FCFA6; --warn:#E3B45A; color-scheme:dark }
 
 *{box-sizing:border-box}
 body{background:var(--paper);color:var(--ink);font:400 15px/1.5 var(--body);padding-inline:16px;padding-block:20px 40px}
