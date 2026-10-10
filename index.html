@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Looseboard Hyde</title>
+<link rel="icon" href="hyde-icon.png">
+<link rel="apple-touch-icon" href="hyde-icon.png">
 <meta name="description" content="Share the story. Keep the spot. Looseboard Hyde strips location data from a photo and replaces the background, on your device.">
 <style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
@@ -13,7 +15,7 @@
 <style>
 /* Layout: a chart table. Photo on the left inside a chart neatline, the working log on the right; stacks on a phone. */
 :root{
-  --paper:#E8EEF0; --panel:#F6F9FA; --ink:#12263A; --muted:#51667A; --line:#C3D0D8;
+  --logo-bg:#000000; --paper:#E8EEF0; --panel:#F6F9FA; --ink:#12263A; --muted:#51667A; --line:#C3D0D8;
   --shoal:#BBDDEA; --magenta:#A81C68; --on-magenta:#FFFFFF; --ok:#1F6B4E; --warn:#8A5A00;
   --display:"Familjen Grotesk","Trebuchet MS",sans-serif;
   --body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -29,10 +31,12 @@
 *{box-sizing:border-box}
 body{background:var(--paper);color:var(--ink);font:400 15px/1.5 var(--body);padding-inline:16px;padding-block:20px 40px}
 .app{max-width:1080px;margin-inline:auto;display:flex;flex-direction:column;gap:20px}
-header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px}
-h1{font:700 30px/1 var(--display);letter-spacing:-.01em;margin:0}
-h1 .lb{font-weight:500;color:var(--muted)}
-header p{margin:0;color:var(--muted);max-width:60ch;min-width:0}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px}
+h1.logo{margin:0;background:var(--logo-bg);line-height:0;padding:8px;flex:0 0 auto}
+h1.logo img{display:block;width:176px;height:auto}
+.intro{flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:5px}
+.lb{font:500 11.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+header p{margin:0;color:var(--ink);max-width:52ch;min-width:0;font-size:16px}
 .cols{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:24px;align-items:start}
 @media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
 .stagewrap{display:flex;flex-direction:column;gap:10px;min-width:0}
@@ -83,8 +87,9 @@ ul.watch{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px;display:
 
 <div class="app">
   <header>
-    <h1><span class="lb">Looseboard</span> Hyde</h1>
-    <p>Share the story. Keep the spot. Your photo is rebuilt on this device with no location tags and no background. Nothing is uploaded.</p>
+    <h1 class="logo"><img src="hyde-logo.png" alt="Hyde" width="800" height="766"></h1>
+    <div class="intro"><span class="lb">A Looseboard brand</span>
+    <p>Share the story. Keep the spot. Your photo is rebuilt on this device with no location tags and no background. Nothing is uploaded.</p></div>
   </header>
 
   <div class="cols">
