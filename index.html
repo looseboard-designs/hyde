@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Looseboard Hyde</title>
+<meta name="description" content="Share the story. Keep the spot. Looseboard Hyde strips location data from a photo and replaces the background, on your device.">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: a chart table. Photo on the left inside a chart neatline, the working log on the right; stacks on a phone. */
+:root{
+  --paper:#E8EEF0; --panel:#F6F9FA; --ink:#12263A; --muted:#51667A; --line:#C3D0D8;
+  --shoal:#BBDDEA; --magenta:#A81C68; --on-magenta:#FFFFFF; --ok:#1F6B4E; --warn:#8A5A00;
+  --display:"Familjen Grotesk","Trebuchet MS",sans-serif;
+  --body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#0C1722; --panel:#13222F; --ink:#DCE7EC; --muted:#93A7B6; --line:#2A3D4D;
+  --shoal:#1D4257; --magenta:#EE6DB0; --on-magenta:#1A0A13; --ok:#6FCFA6; --warn:#E3B45A; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --paper:#0C1722; --panel:#13222F; --ink:#DCE7EC; --muted:#93A7B6; --line:#2A3D4D;
+  --shoal:#1D4257; --magenta:#EE6DB0; --on-magenta:#1A0A13; --ok:#6FCFA6; --warn:#E3B45A; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:400 15px/1.5 var(--body);padding-inline:16px;padding-block:20px 40px}
+.app{max-width:1080px;margin-inline:auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px}
+h1{font:700 30px/1 var(--display);letter-spacing:-.01em;margin:0}
+h1 .lb{font-weight:500;color:var(--muted)}
+header p{margin:0;color:var(--muted);max-width:60ch;min-width:0}
+.cols{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
+.stagewrap{display:flex;flex-direction:column;gap:10px;min-width:0}
+.neat{border:6px solid var(--ink);border-image:repeating-linear-gradient(90deg,var(--ink) 0 16px,var(--panel) 16px 32px) 6;background:var(--panel);position:relative;line-height:0}
+#stage{display:block;width:100%;height:auto;margin-inline:auto;background:var(--panel)}
+#cursor{position:absolute;border:2px solid var(--magenta);border-radius:50%;pointer-events:none;box-shadow:0 0 0 1px var(--panel)}
+.neat.painting{outline:3px solid var(--magenta);outline-offset:3px}
+.how{font-weight:600;color:var(--ink)}
+.watch b{color:var(--ink);font-weight:600}
+#stage.brush{touch-action:none;cursor:crosshair}
+.tag{position:absolute;left:8px;top:8px;font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;background:var(--ink);color:var(--paper);padding:5px 7px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.status{font:400 12.5px/1.4 var(--mono);color:var(--muted);min-width:0;flex:1 1 200px}
+.status.ok{color:var(--ok)} .status.warn{color:var(--warn)}
+.side{display:flex;flex-direction:column;gap:22px;min-width:0}
+section{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:14px}
+h2{font:500 12px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0}
+.log{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 14px;margin:0;font:400 13px/1.4 var(--mono)}
+.log dt{color:var(--muted)} .log dd{margin:0;overflow-wrap:anywhere}
+.log .had{text-decoration:line-through;text-decoration-color:var(--magenta);text-decoration-thickness:2px}
+.log .gone{color:var(--magenta);margin-left:8px;white-space:nowrap}
+.hint{color:var(--muted);font-size:13.5px;margin:0}
+button,.filebtn{font:600 14px/1 var(--body);color:var(--ink);background:var(--panel);border:1.5px solid var(--ink);padding:11px 14px;cursor:pointer;border-radius:2px}
+button:hover,.filebtn:hover{background:var(--shoal)}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--magenta);border-color:var(--magenta);color:var(--on-magenta);font-size:15px;padding:14px 18px}
+button.primary:hover{filter:brightness(1.08);background:var(--magenta)}
+:focus-visible{outline:3px solid var(--magenta);outline-offset:2px}
+.filebtn{display:inline-block;position:relative;text-decoration:none}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.filebtn:focus-within{outline:3px solid var(--magenta);outline-offset:2px}
+.swatches{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sw{width:38px;height:38px;padding:0;border:1.5px solid var(--line);border-radius:50%}
+.sw[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 3px var(--paper),0 0 0 5px var(--ink)}
+#custom{width:44px;height:38px;padding:0;border:1.5px solid var(--line);background:var(--panel)}
+.seg{display:inline-flex;border:1.5px solid var(--ink);border-radius:2px}
+.seg button{border:0;border-radius:0;padding:10px 14px}
+.seg button+button{border-left:1.5px solid var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+label.sl{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--muted);flex:1 1 180px;min-width:0}
+label.sl input{flex:1;min-width:0;accent-color:var(--magenta)}
+label.ck{display:flex;gap:8px;align-items:center;font-size:13.5px}
+label.ck input{accent-color:var(--magenta);width:17px;height:17px}
+ul.watch{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px;display:flex;flex-direction:column;gap:3px}
+#outwrap{display:flex;flex-direction:column;gap:8px}
+#out{border:1px solid var(--line);max-height:320px;width:auto;align-self:flex-start}
+</style>
+
+<div class="app">
+  <header>
+    <h1><span class="lb">Looseboard</span> Hyde</h1>
+    <p>Share the story. Keep the spot. Your photo is rebuilt on this device with no location tags and no background. Nothing is uploaded.</p>
+  </header>
+
+  <div class="cols">
+    <div class="stagewrap">
+      <div class="neat" id="neat">
+        <canvas id="stage" width="1200" height="900" aria-label="Photo preview"></canvas>
+        <span class="tag" id="tag">Example photo</span>
+        <span id="cursor" hidden></span>
+      </div>
+      <div class="row">
+        <label class="filebtn">Choose a photo<input type="file" id="file" accept="image/*"></label>
+        <span class="status" id="status" role="status">Loading the cutout engine…</span>
+      </div>
+    </div>
+
+    <div class="side">
+      <section>
+        <h2>What the photo carries</h2>
+        <dl class="log" id="log"></dl>
+      </section>
+
+      <section>
+        <h2>Background</h2>
+        <div class="swatches" id="swatches">
+          <input type="color" id="custom" value="#7d8f9a" aria-label="Custom background colour">
+        </div>
+        <p class="hint">The background is replaced, not blurred. A blurred ridgeline or pier can still be recognised.</p>
+      </section>
+
+      <section>
+        <h2>Touch up</h2>
+        <div class="row">
+          <div class="seg" role="group" aria-label="Brush">
+            <button type="button" id="b-off" aria-pressed="true">Off</button>
+            <button type="button" id="b-keep" aria-pressed="false">Keep</button>
+            <button type="button" id="b-hide" aria-pressed="false">Hide</button>
+          </div>
+          <button type="button" id="undo" disabled>Undo</button>
+          <button type="button" id="reset">Reset</button>
+        </div>
+        <div class="row">
+          <label class="sl" for="size">Brush size<input type="range" id="size" min="1" max="15" step="0.5" value="5"></label>
+          <label class="ck" for="ghost"><input type="checkbox" id="ghost">Show hidden areas</label>
+        </div>
+        <p class="hint how" id="how" role="status"></p>
+      </section>
+
+      <section>
+        <h2>Save</h2>
+        <div class="row">
+          <button type="button" class="primary" id="save">Save clean copy</button>
+          <span class="status" id="savestatus" role="status"></span>
+        </div>
+        <div id="outwrap" hidden>
+          <p class="hint">Press and hold the picture (or right-click it) and choose Save.</p>
+          <div class="row">
+            <button type="button" id="share" hidden>Share or save to Photos</button>
+            <a class="filebtn" id="dl" download="hyde-photo.jpg" hidden>Download</a>
+          </div>
+          <img id="out" alt="Clean copy of your photo">
+        </div>
+      </section>
+
+      <section>
+        <h2>Look for these before you post</h2>
+        <p class="hint">The app can't spot these for you. If one is in the picture, paint over it with Hide.</p>
+        <ul class="watch">
+          <li><b>Boat name or registration number.</b> Anyone can look up the boat and its home port.</li>
+          <li><b>Fishfinder or chartplotter screen.</b> It can show your exact position, depth and waypoints.</li>
+          <li><b>Sunglasses.</b> The lenses can mirror the shoreline you just removed.</li>
+          <li><b>Timing.</b> Posting while you're still out tells people the bite is on right now, and where your truck is parked.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.wasm.min.js"></script>
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id)};
+var stage=$("stage"), sctx=stage.getContext("2d");
+var MAXSIDE=2048;
+var orig=document.createElement("canvas");      // original pixels, never exported directly
+var mask=document.createElement("canvas");      // alpha = keep
+var subj=document.createElement("canvas");      // original clipped by mask
+var autoMask=null, undoStack=[];
+var bg="#5E7482", brush="off", ghost=false, meta={example:true}, session=null, engine="loading";
+
+/* ---------- metadata reader (JPEG EXIF) ---------- */
+function readExif(buf){
+  var out={hasExif:false};
+  try{
+    var v=new DataView(buf); if(v.getUint16(0)!==0xFFD8) return out;
+    var o=2;
+    while(o+4<v.byteLength){
+      var m=v.getUint16(o); if((m&0xFF00)!==0xFF00||m===0xFFDA) break;
+      var len=v.getUint16(o+2);
+      if(m===0xFFE1&&v.getUint32(o+4)===0x45786966){ out.hasExif=true; tiff(v,o+10,out); return out; }
+      o+=2+len;
+    }
+  }catch(e){}
+  return out;
+}
+function tiff(v,t,out){
+  var le=v.getUint16(t)===0x4949;
+  var u16=function(p){return v.getUint16(p,le)}, u32=function(p){return v.getUint32(p,le)};
+  function str(e){var n=u32(e+4),p=n>4?t+u32(e+8):e+8,s="";for(var i=0;i<n;i++){var c=v.getUint8(p+i);if(!c)break;s+=String.fromCharCode(c)}return s.trim()}
+  function rat3(e){var p=t+u32(e+8),r=[];for(var i=0;i<3;i++){r.push(u32(p+i*8)/(u32(p+i*8+4)||1))}return r[0]+r[1]/60+r[2]/3600}
+  function ifd(off,fn){var n=u16(t+off);for(var i=0;i<n;i++){var e=t+off+2+i*12;fn(u16(e),e)}}
+  var gps=0,sub=0,latR,lonR,lat,lon;
+  ifd(u32(t+4),function(tag,e){
+    if(tag===0x010F)out.make=str(e); else if(tag===0x0110)out.model=str(e);
+    else if(tag===0x0132)out.date=str(e); else if(tag===0x8825)gps=u32(e+8); else if(tag===0x8769)sub=u32(e+8);
+  });
+  if(sub)ifd(sub,function(tag,e){if(tag===0x9003)out.date=str(e)});
+  if(gps)ifd(gps,function(tag,e){
+    if(tag===1)latR=String.fromCharCode(v.getUint8(e+8)); else if(tag===2)lat=rat3(e);
+    else if(tag===3)lonR=String.fromCharCode(v.getUint8(e+8)); else if(tag===4)lon=rat3(e);
+  });
+  if(lat!=null&&lon!=null){out.lat=lat;out.latR=latR||"N";out.lon=lon;out.lonR=lonR||"E"}
+}
+// degrees and decimal minutes, the way a chartplotter shows a waypoint
+function ddm(x,ref,pad){var d=Math.floor(x),m=(x-d)*60;return String(d).padStart(pad,"0")+"° "+m.toFixed(3).padStart(6,"0")+"′ "+ref}
+
+function showLog(){
+  var rows=[];
+  var loc=meta.lat!=null?ddm(meta.lat,meta.latR,2)+"  "+ddm(meta.lon,meta.lonR,3):null;
+  rows.push(["Position",loc,"No location tag found"]);
+  rows.push(["Taken",meta.date||null,"No time tag found"]);
+  rows.push(["Camera",[meta.make,meta.model].filter(Boolean).join(" ")||null,"No camera tag found"]);
+  rows.push(["File name",meta.name||null,"—"]);
+  var log=$("log"); log.textContent="";
+  rows.forEach(function(r){
+    var dt=document.createElement("dt"); dt.textContent=r[0];
+    var dd=document.createElement("dd");
+    if(r[1]){var s=document.createElement("span");s.className="had";s.textContent=r[1];dd.appendChild(s);
+      var g=document.createElement("span");g.className="gone";g.textContent=r[0]==="File name"?"renamed":"removed";dd.appendChild(g);}
+    else dd.textContent=r[2];
+    log.appendChild(dt);log.appendChild(dd);
+  });
+}
+
+/* ---------- compositing ---------- */
+function size(c,w,h){c.width=w;c.height=h}
+function rebuildSubject(){
+  var x=subj.getContext("2d");
+  x.globalCompositeOperation="source-over"; x.clearRect(0,0,subj.width,subj.height); x.drawImage(orig,0,0);
+  x.globalCompositeOperation="destination-in"; x.drawImage(mask,0,0);
+  x.globalCompositeOperation="source-over";
+}
+function paint(ctx,withGhost){
+  var w=orig.width,h=orig.height;
+  ctx.globalAlpha=1; ctx.fillStyle=bg; ctx.fillRect(0,0,w,h);
+  var g=ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,"rgba(255,255,255,.14)"); g.addColorStop(1,"rgba(0,0,0,.10)");
+  ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  if(withGhost){ctx.globalAlpha=.3;ctx.drawImage(orig,0,0);ctx.globalAlpha=1}
+  ctx.drawImage(subj,0,0);
+}
+var raf=0;
+function render(){ if(raf)return; raf=requestAnimationFrame(function(){raf=0;rebuildSubject();paint(sctx,ghost)}) }
+function setImage(w,h){ [stage,orig,mask,subj].forEach(function(c){size(c,w,h)}); stage.style.maxWidth="calc(70vh * "+(w/h).toFixed(4)+")"; undoStack=[]; $("undo").disabled=true }
+function snapshotAuto(){ autoMask=document.createElement("canvas"); size(autoMask,mask.width,mask.height); autoMask.getContext("2d").drawImage(mask,0,0) }
+
+/* ---------- example scene, drawn here so the page opens working ---------- */
+function drawExample(){
+  var w=1200,h=900; setImage(w,h);
+  var c=orig.getContext("2d");
+  var sky=c.createLinearGradient(0,0,0,480); sky.addColorStop(0,"#8FB7D6"); sky.addColorStop(1,"#F3D9B0");
+  c.fillStyle=sky; c.fillRect(0,0,w,480);
+  c.fillStyle="#FBEFCB"; c.beginPath(); c.arc(930,330,54,0,7); c.fill();
+  c.fillStyle="#5C6F73"; c.beginPath(); c.moveTo(0,470);
+  [[90,360],[190,410],[300,250],[350,300],[400,235],[520,400],[640,430],[760,380],[900,440],[1200,455],[1200,480],[0,480]].forEach(function(p){c.lineTo(p[0],p[1])}); c.fill();
+  c.fillStyle="#F4F1E6"; c.fillRect(1040,330,26,125); c.fillStyle="#B8402F"; c.fillRect(1040,372,26,22); c.fillRect(1034,318,38,14);
+  var sea=c.createLinearGradient(0,480,0,h); sea.addColorStop(0,"#3F7E97"); sea.addColorStop(1,"#1F4E66");
+  c.fillStyle=sea; c.fillRect(0,480,w,420);
+  c.fillStyle="#4A3B2E"; c.fillRect(0,560,430,16); for(var i=0;i<6;i++)c.fillRect(30+i*75,560,12,90);
+  c.strokeStyle="rgba(255,255,255,.25)"; c.lineWidth=3; for(i=0;i<9;i++){c.beginPath();c.moveTo(480+i*60,620+i*28);c.lineTo(560+i*60,620+i*28);c.stroke()}
+  var m=mask.getContext("2d"); m.clearRect(0,0,w,h); drawAngler(m);
+  drawAngler(c); snapshotAuto();
+}
+function drawAngler(c){
+  c.save(); c.translate(600,0);
+  c.fillStyle="#2E4A3F"; c.beginPath(); c.moveTo(-190,900); c.quadraticCurveTo(-180,560,-70,520); c.lineTo(70,520); c.quadraticCurveTo(180,560,190,900); c.fill();
+  c.fillStyle="#D9A27C"; c.beginPath(); c.arc(0,430,74,0,7); c.fill(); c.fillRect(-28,490,56,44);
+  c.fillStyle="#B0273A"; c.beginPath(); c.arc(0,410,78,Math.PI,0); c.fill(); c.fillRect(-78,402,190,18);
+  c.fillStyle="#93A6AC"; c.beginPath(); c.ellipse(0,680,250,62,0,0,7); c.fill();
+  c.beginPath(); c.moveTo(235,680); c.lineTo(320,620); c.lineTo(320,740); c.fill();
+  c.fillStyle="#E7ECEC"; c.beginPath(); c.ellipse(-10,702,205,30,0,0,Math.PI); c.fill();
+  c.fillStyle="#12263A"; c.beginPath(); c.arc(-195,668,9,0,7); c.fill();
+  c.fillStyle="#D9A27C"; c.beginPath(); c.arc(-120,735,34,0,7); c.arc(130,735,34,0,7); c.fill();
+  c.restore();
+}
+
+/* ---------- cutout engine ---------- */
+function setStatus(t,cls){var s=$("status");s.textContent=t;s.className="status"+(cls?" "+cls:"")}
+function loadEngine(){
+  if(!window.ort){engine="off";return Promise.resolve()}
+  ort.env.wasm.numThreads=1; ort.env.wasm.wasmPaths="./";
+  return fetch("model.b64.txt").then(function(r){if(!r.ok)throw new Error("model");return r.text()})
+    .then(function(t){var s=atob(t.trim()),u=new Uint8Array(s.length);for(var i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u})
+    .then(function(b){return ort.InferenceSession.create(b,{executionProviders:["wasm"]})})
+    .then(function(s){session=s;engine="ready"})
+    .catch(function(e){console.warn("cutout engine unavailable",e);engine="off"});
+}
+function autoCut(){
+  var N=320,t=document.createElement("canvas"); size(t,N,N);
+  var tc=t.getContext("2d"); tc.drawImage(orig,0,0,N,N);
+  var d=tc.getImageData(0,0,N,N).data, f=new Float32Array(3*N*N), mx=1, i;
+  for(i=0;i<d.length;i++) if((i&3)!==3&&d[i]>mx)mx=d[i];
+  var mean=[.485,.456,.406],sd=[.229,.224,.225];
+  for(i=0;i<N*N;i++) for(var k=0;k<3;k++) f[k*N*N+i]=(d[i*4+k]/mx-mean[k])/sd[k];
+  var feeds={}; feeds[session.inputNames[0]]=new ort.Tensor("float32",f,[1,3,N,N]);
+  return session.run(feeds).then(function(res){
+    var o=res[session.outputNames[0]].data, lo=Infinity, hi=-Infinity;
+    for(i=0;i<o.length;i++){if(o[i]<lo)lo=o[i];if(o[i]>hi)hi=o[i]}
+    var im=tc.createImageData(N,N);
+    for(i=0;i<N*N;i++){var a=((o[i]-lo)/(hi-lo||1)-.35)/.3; a=a<0?0:a>1?1:a; im.data[i*4]=im.data[i*4+1]=im.data[i*4+2]=255; im.data[i*4+3]=a*255}
+    tc.putImageData(im,0,0);
+    var m=mask.getContext("2d"); m.clearRect(0,0,mask.width,mask.height); m.imageSmoothingQuality="high"; m.drawImage(t,0,0,mask.width,mask.height);
+  });
+}
+
+/* ---------- loading a photo ---------- */
+function decode(file){
+  // a plain <img> is the most dependable decoder on phones; createImageBitmap is the backup
+  return viaImg(file).catch(function(e){
+    if(!window.createImageBitmap) throw e;
+    return createImageBitmap(file,{imageOrientation:"from-image"});
+  });
+}
+function viaImg(file){return new Promise(function(ok,no){var u=URL.createObjectURL(file),im=new Image();im.onload=function(){ok(im);setTimeout(function(){URL.revokeObjectURL(u)},1000)};im.onerror=function(){URL.revokeObjectURL(u);no(new Error("decode"))};im.src=u})}
+var job=0;
+function openFile(file){
+  var me=++job;
+  setStatus("Reading the photo…"); $("outwrap").hidden=true; $("savestatus").textContent="";
+  meta={name:file.name}; showLog();
+  // tags are read separately so a problem there can never stop the photo from showing
+  try{ file.arrayBuffer().then(function(b){if(me!==job)return;var m=readExif(b);m.name=file.name;meta=m;showLog()},function(){}) }catch(e){}
+  decode(file).then(function(im){
+    if(me!==job)return;
+    var w=im.naturalWidth||im.width, h=im.naturalHeight||im.height;
+    if(!w||!h) throw new Error("empty");
+    var s=Math.min(1,MAXSIDE/Math.max(w,h));
+    w=Math.round(w*s); h=Math.round(h*s); setImage(w,h);
+    orig.getContext("2d").drawImage(im,0,0,w,h);
+    $("tag").hidden=true;
+    // show the photo faintly straight away so it is clear it loaded
+    setGhost(true); render();
+    setStatus("Photo loaded. Finding the subject…");
+    var wait=new Promise(function(ok){setTimeout(ok,25000)});
+    return Promise.race([enginePromise,wait]).then(function(){
+      if(engine!=="ready") throw new Error("engine "+engine);
+      return new Promise(function(ok){setTimeout(ok,50)}).then(autoCut);
+    }).then(function(){
+      if(me!==job)return;
+      snapshotAuto(); setGhost(false); render();
+      setStatus("Subject found. Check the edges, then save.","ok");
+    },function(err){
+      if(me!==job)return;
+      console.warn("cutout failed",err);
+      mask.getContext("2d").clearRect(0,0,mask.width,mask.height);
+      snapshotAuto(); setGhost(true); setBrush("keep"); render();
+      setStatus("Automatic cutout didn't run here ("+((err&&err.message)||"unknown")+"). The photo is shown faintly: drag over what you want to keep.","warn");
+    });
+  }).catch(function(err){ if(me===job)setStatus("That photo couldn't be opened ("+((err&&err.message)||"unknown")+"). Try another photo, or a JPEG or PNG.","warn") });
+}
+
+/* ---------- brush ---------- */
+var HOW={off:"Brush is off. Choose Keep or Hide, then drag your finger or mouse across the photo.",
+  keep:"Keep is on. Drag across the photo to bring back anything the cutout removed. Removed areas show faintly so you can find them.",
+  hide:"Hide is on. Drag across the photo to erase anything still showing."};
+var cur=$("cursor"), curT=0;
+function brushPx(){var r=stage.getBoundingClientRect();return Math.max(r.width,r.height)*(+$("size").value)/100}
+function showCursor(cx,cy){var r=stage.getBoundingClientRect(),n=$("neat").getBoundingClientRect(),d=brushPx();
+  cur.style.width=cur.style.height=d+"px";cur.style.left=(r.left-n.left-$("neat").clientLeft+cx-d/2)+"px";cur.style.top=(r.top-n.top-$("neat").clientTop+cy-d/2)+"px";cur.hidden=false}
+function setBrush(b){$("how").textContent=HOW[b];$("neat").classList.toggle("painting",b!=="off");if(b==="off")cur.hidden=true;brush=b;["off","keep","hide"].forEach(function(k){$("b-"+k).setAttribute("aria-pressed",String(k===b))});stage.classList.toggle("brush",b!=="off")}
+function setGhost(g){ghost=g;$("ghost").checked=g}
+function pt(e){var r=stage.getBoundingClientRect();return [(e.clientX-r.left)*stage.width/r.width,(e.clientY-r.top)*stage.height/r.height]}
+var last=null;
+function stroke(a,b){
+  var m=mask.getContext("2d"); m.save();
+  m.globalCompositeOperation=brush==="keep"?"source-over":"destination-out";
+  m.strokeStyle="#fff"; m.lineCap="round"; m.lineJoin="round";
+  m.lineWidth=Math.max(stage.width,stage.height)*(+$("size").value)/100;
+  m.beginPath(); m.moveTo(a[0],a[1]); m.lineTo(b[0]+.01,b[1]+.01); m.stroke(); m.restore(); render();
+}
+stage.addEventListener("pointerdown",function(e){
+  if(brush==="off")return; e.preventDefault(); stage.setPointerCapture(e.pointerId);
+  undoStack.push(mask.getContext("2d").getImageData(0,0,mask.width,mask.height)); if(undoStack.length>5)undoStack.shift();
+  $("undo").disabled=false; last=pt(e); stroke(last,last);
+});
+stage.addEventListener("pointermove",function(e){if(brush!=="off"){var r=stage.getBoundingClientRect();clearTimeout(curT);showCursor(e.clientX-r.left,e.clientY-r.top)}if(!last)return;var p=pt(e);stroke(last,p);last=p});
+["pointerup","pointercancel"].forEach(function(n){stage.addEventListener(n,function(){last=null})});
+["off","keep","hide"].forEach(function(k){$("b-"+k).addEventListener("click",function(){setBrush(k);if(k==="keep")setGhost(true);render()})});
+stage.addEventListener("pointerleave",function(){cur.hidden=true});
+$("size").addEventListener("input",function(){var r=stage.getBoundingClientRect();showCursor(r.width/2,r.height/2);clearTimeout(curT);curT=setTimeout(function(){cur.hidden=true},1200)});
+$("ghost").addEventListener("change",function(e){ghost=e.target.checked;render()});
+$("undo").addEventListener("click",function(){var d=undoStack.pop();if(d)mask.getContext("2d").putImageData(d,0,0);$("undo").disabled=!undoStack.length;render()});
+$("reset").addEventListener("click",function(){if(!autoMask)return;var m=mask.getContext("2d");m.clearRect(0,0,mask.width,mask.height);m.drawImage(autoMask,0,0);undoStack=[];$("undo").disabled=true;render()});
+
+/* ---------- background ---------- */
+var COLORS=[["#5E7482","Slate"],["#D8D2C2","Sand"],["#2F5D62","Kelp"],["#F2F4F5","White"],["#14181C","Black"]];
+COLORS.forEach(function(c,i){
+  var b=document.createElement("button"); b.type="button"; b.className="sw"; b.id="sw-"+i; b.style.background=c[0];
+  b.setAttribute("aria-label",c[1]+" background"); b.setAttribute("aria-pressed",String(i===0));
+  b.addEventListener("click",function(){pick(c[0],b)}); $("swatches").insertBefore(b,$("custom"));
+});
+function pick(col,btn){bg=col;Array.prototype.forEach.call(document.querySelectorAll(".sw"),function(x){x.setAttribute("aria-pressed",String(x===btn))});render()}
+$("custom").addEventListener("input",function(e){pick(e.target.value,null)});
+
+/* ---------- save: a brand-new image, re-checked before it leaves ---------- */
+$("save").addEventListener("click",function(){
+  var st=$("savestatus"); st.className="status"; st.textContent="Building the clean copy…";
+  var out=document.createElement("canvas"); size(out,orig.width,orig.height);
+  rebuildSubject(); paint(out.getContext("2d"),false);
+  out.toBlob(function(blob){
+    if(!blob){st.className="status warn";st.textContent="Couldn't build the picture. Try a smaller photo.";return}
+    blob.arrayBuffer().then(function(buf){
+      var chk=readExif(buf);
+      if(chk.hasExif){st.className="status warn";st.textContent="Stopped: the copy still carries tags.";return}
+      var note="Checked: no location, time or camera tags.";
+      var use=window.claude&&window.claude.use?window.claude.use("downloads"):Promise.resolve(null);
+      return use.then(function(dl){
+        if(!dl) return fallback(blob,note);
+        return dl.save({filename:"hyde-photo.jpg",data:blob}).then(function(){st.className="status ok";st.textContent="Saved. "+note},
+          function(err){ if(err&&err.code==="declined"){st.textContent="Not saved."} else if(err&&err.code==="rate_limited"){st.textContent="A save prompt is already open."} else fallback(blob,note) });
+      });
+    });
+  },"image/jpeg",.92);
+  function fallback(blob,note){var im=$("out");if(im.src)URL.revokeObjectURL(im.src);im.src=URL.createObjectURL(blob);$("outwrap").hidden=false;
+    // on an ordinary website (outside Claude) offer the phone's share sheet and a normal download
+    var alone=!window.claude, f=null, sh=$("share"), dl=$("dl");
+    try{f=new File([blob],"hyde-photo.jpg",{type:"image/jpeg"})}catch(e){}
+    if(alone&&f&&navigator.canShare&&navigator.canShare({files:[f]})){sh.hidden=false;sh.onclick=function(){navigator.share({files:[f]}).catch(function(){})}}else sh.hidden=true;
+    if(alone){dl.href=im.src;dl.hidden=false}else dl.hidden=true;st.className="status ok";st.textContent=note}
+});
+
+// the picker is cleared when it is opened, never right after a choice: clearing it early can make the phone discard the chosen photo before it is read
+$("file").addEventListener("click",function(e){e.target.value=""});
+$("file").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f)openFile(f)});
+
+/* ---------- start ---------- */
+meta={example:true,lat:44.8033,latR:"N",lon:124.065,lonR:"W",date:"2026:09:27 06:42:10",make:"Example",model:"Phone",name:"secret-jetty-coho.jpg"};
+drawExample(); showLog(); setBrush("off"); setGhost(true); rebuildSubject(); paint(sctx,true);
+var enginePromise=loadEngine().then(function(){
+  if(engine==="ready")setStatus("Ready. Choose a photo to try it on your own.","ok");
+  else setStatus("Automatic cutout isn't available here. You can still paint the cutout by hand.","warn");
+});
+})();
+</script>
+
+</body>
+</html>
