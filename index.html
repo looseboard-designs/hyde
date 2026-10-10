@@ -397,16 +397,42 @@ COLORS.forEach(function(c,i){
 function pick(col,btn){bg=col;Array.prototype.forEach.call(document.querySelectorAll(".sw"),function(x){x.setAttribute("aria-pressed",String(x===btn))});render()}
 $("custom").addEventListener("input",function(e){pick(e.target.value,null)});
 
-/* ---------- save: a brand-new image, re-checked before it leaves ---------- */
+/* ---------- save: a brand-new image, scrubbed and re-checked before it leaves ---------- */
+// Some browsers (iPhone Safari among them) write their own small tag block into every JPEG they make.
+// This drops every tag block and comment from the finished file, keeping only the picture and its colour profile.
+function scrubJpeg(buf){
+  var v=new DataView(buf), n=v.byteLength;
+  if(n<4||v.getUint16(0)!==0xFFD8) return null;
+  var parts=[buf.slice(0,2)], o=2, done=false;
+  while(o+4<=n){
+    var m=v.getUint16(o);
+    if((m&0xFF00)!==0xFF00) break;
+    if(m===0xFFDA){parts.push(buf.slice(o));done=true;break}
+    var len=v.getUint16(o+2), end=o+2+len, keep=true;
+    if(m===0xFFFE) keep=false;                              // comment
+    else if(m===0xFFE2) keep=len>=14&&v.getUint32(o+4)===0x4943435F;   // keep only an ICC colour profile
+    else if(m>=0xFFE1&&m<=0xFFEF) keep=false;               // EXIF, XMP, IPTC and any other app block
+    if(keep) parts.push(buf.slice(o,end));
+    o=end;
+  }
+  if(!done) return null;
+  return new Blob(parts,{type:"image/jpeg"});
+}
 $("save").addEventListener("click",function(){
   var st=$("savestatus"); st.className="status"; st.textContent="Building the clean copy…";
   var out=document.createElement("canvas"); size(out,orig.width,orig.height);
   rebuildSubject(); paint(out.getContext("2d"),false);
   out.toBlob(function(blob){
     if(!blob){st.className="status warn";st.textContent="Couldn't build the picture. Try a smaller photo.";return}
-    blob.arrayBuffer().then(function(buf){
+    blob.arrayBuffer().then(function(raw){
+      var clean=scrubJpeg(raw);
+      if(!clean){st.className="status warn";st.textContent="Stopped: the picture couldn't be checked, so it wasn't saved.";return}
+      blob=clean;
+      return clean.arrayBuffer();
+    }).then(function(buf){
+      if(!buf) return;
       var chk=readExif(buf);
-      if(chk.hasExif){st.className="status warn";st.textContent="Stopped: the copy still carries tags.";return}
+      if(chk.hasExif){st.className="status warn";st.textContent="Stopped: the copy still carries tags after scrubbing, so it wasn't saved.";return}
       var note="Checked: no location, time or camera tags.";
       var use=window.claude&&window.claude.use?window.claude.use("downloads"):Promise.resolve(null);
       return use.then(function(dl){
