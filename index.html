@@ -125,6 +125,7 @@ ul.watch{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px;display:
           </div>
           <button type="button" id="undo" disabled>Undo</button>
           <button type="button" id="reset">Reset</button>
+          <button type="button" id="keepall">Keep all</button>
         </div>
         <div class="row">
           <label class="sl" for="size">Brush size<input type="range" id="size" min="1" max="15" step="0.5" value="5"></label>
@@ -249,35 +250,88 @@ function paint(ctx,withGhost){
   ctx.drawImage(subj,0,0);
 }
 var raf=0;
-/* ---------- example: a bar sweeps across the photo, leaving the sanitized version behind it ---------- */
-var demo=false, demoT0=0;
+/* ---------- examples: two short demos that play in turn until a control is touched ---------- */
+// "sweep": a bar crosses the photo and leaves the sanitized version behind it.
+// "brush": the Hide brush paints out the landmarks and leaves the rest of the photo.
+var demo=false, demoOff=false, demoT0=0, scenes=[], sceneI=0;
+var strokes=document.createElement("canvas"), hideL=document.createElement("canvas"), bpath=null, bdone=0;
 function ease(x){return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2}
-function demoDraw(p){
+function chip(c,t,right){
+  var w=orig.width,h=orig.height,fs=Math.max(13,Math.round(h*.02)),pad=fs*.6;
+  c.font="500 "+fs+"px "+getComputedStyle(document.body).getPropertyValue("--mono"); c.textBaseline="middle";
+  var bw=c.measureText(t).width+pad*2,bx=right?w-fs-bw:fs,by=h-fs*2.6;
+  c.fillStyle="rgba(0,0,0,.72)";c.fillRect(bx,by,bw,fs*1.9);c.fillStyle="#fff";c.fillText(t,bx+pad,by+fs*.98);
+}
+function sweepDraw(p){
   var w=orig.width,h=orig.height,x=Math.round(p*w),c=sctx;
   paint(c,false);
   if(x<w){c.save();c.beginPath();c.rect(x,0,w-x,h);c.clip();c.drawImage(orig,0,0);c.restore()}
-  var fs=Math.max(13,Math.round(h*.02)),pad=fs*.6; c.font="500 "+fs+"px "+getComputedStyle(document.body).getPropertyValue("--mono");c.textBaseline="middle";
-  function chip(t,cx,right){var tw=c.measureText(t).width,bw=tw+pad*2,bx=right?cx-bw:cx,by=h-fs*2.6;c.fillStyle="rgba(0,0,0,.72)";c.fillRect(bx,by,bw,fs*1.9);c.fillStyle="#fff";c.fillText(t,bx+pad,by+fs*.98)}
-  c.save();
-  if(x>w*.3){c.beginPath();c.rect(0,0,x,h);c.clip();chip("SANITIZED",fs,false)}
-  c.restore();c.save();
-  if(x<w*.7){c.beginPath();c.rect(x,0,w-x,h);c.clip();chip("ORIGINAL",w-fs,true)}
-  c.restore();
+  c.save(); if(x>w*.3){c.beginPath();c.rect(0,0,x,h);c.clip();chip(c,"SANITIZED",false)} c.restore();
+  c.save(); if(x<w*.7){c.beginPath();c.rect(x,0,w-x,h);c.clip();chip(c,"ORIGINAL",true)} c.restore();
   if(p>0&&p<1){var bw=Math.max(4,Math.round(w*.007));c.save();c.shadowColor="rgba(255,255,255,.9)";c.shadowBlur=bw*4;c.fillStyle="#fff";c.fillRect(x-bw/2,0,bw,h);c.restore()}
+}
+// plan the brush's route: back-and-forth rows over the area that ends up hidden
+function prepBrush(){
+  var w=orig.width,h=orig.height,D=w*.15;
+  size(strokes,w,h); size(hideL,w,h); bdone=0;
+  var sw=96,sh=Math.round(96*h/w),t=document.createElement("canvas"); size(t,sw,sh);
+  var tc=t.getContext("2d"); tc.drawImage(mask,0,0,sw,sh); var d=tc.getImageData(0,0,sw,sh).data;
+  var pts=[],flip=false;
+  for(var y=D*.45;y<h+D;y+=D*.72){
+    var y0=Math.max(0,Math.floor((y-D/2)/h*sh)),y1=Math.min(sh-1,Math.ceil((y+D/2)/h*sh)),lo=sw,hi=-1;
+    for(var yy=y0;yy<=y1;yy++)for(var xx=0;xx<sw;xx++)if(d[(yy*sw+xx)*4+3]<128){if(xx<lo)lo=xx;if(xx>hi)hi=xx}
+    if(hi<0)continue;
+    var xa=lo/sw*w,xb=(hi+1)/sw*w; pts.push(flip?[xb,y]:[xa,y]); pts.push(flip?[xa,y]:[xb,y]); flip=!flip;
+  }
+  var cum=[0]; for(var i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
+  bpath={pts:pts,cum:cum,total:cum[cum.length-1]||1,D:D};
+}
+function bpos(len){
+  var P=bpath.pts,C=bpath.cum,i=1; while(i<C.length-1&&C[i]<len)i++;
+  var seg=C[i]-C[i-1]||1,f=Math.min(1,Math.max(0,(len-C[i-1])/seg));
+  return [P[i-1][0]+(P[i][0]-P[i-1][0])*f,P[i-1][1]+(P[i][1]-P[i-1][1])*f];
+}
+function brushDraw(t){
+  var w=orig.width,h=orig.height,c=sctx,D=bpath.D,q=Math.min(1,Math.max(0,(t-1.2)/6.4)),len=q*bpath.total;
+  if(len>bdone){
+    var s=strokes.getContext("2d"),a=bpos(bdone); s.strokeStyle="#fff";s.lineCap="round";s.lineJoin="round";s.lineWidth=D;s.beginPath();s.moveTo(a[0],a[1]);
+    for(var l=bdone+D/4;l<len;l+=D/4){var m=bpos(l);s.lineTo(m[0],m[1])}
+    var e=bpos(len);s.lineTo(e[0]+.01,e[1]+.01);s.stroke(); bdone=len;
+  }
+  if(q>=1){ paint(c,false); chip(c,"SANITIZED",false); return }
+  // what the brush has covered so far, limited to the parts that are meant to go
+  var hc=hideL.getContext("2d"); hc.globalCompositeOperation="source-over"; hc.clearRect(0,0,w,h); hc.drawImage(strokes,0,0);
+  hc.globalCompositeOperation="destination-out"; hc.drawImage(mask,0,0);
+  hc.globalCompositeOperation="source-in"; hc.fillStyle=bg; hc.fillRect(0,0,w,h); hc.globalCompositeOperation="source-over";
+  c.drawImage(orig,0,0); c.drawImage(hideL,0,0);
+  if(t<1.2) chip(c,"ORIGINAL",true); else chip(c,"HIDE BRUSH",false);
+  var p=bpos(len),al=Math.min(1,t/.6);
+  c.save(); c.globalAlpha=al; c.beginPath(); c.arc(p[0],p[1],D/2,0,7); c.lineWidth=Math.max(3,w*.006); c.strokeStyle="#EE6DB0"; c.shadowColor="rgba(0,0,0,.6)"; c.shadowBlur=6; c.stroke(); c.restore();
+}
+function loadScene(i){
+  var sc=scenes[i]; sceneI=i;
+  setImage(sc.ph.naturalWidth,sc.ph.naturalHeight);
+  orig.getContext("2d").drawImage(sc.ph,0,0);
+  mask.getContext("2d").drawImage(sc.mk,0,0,mask.width,mask.height);
+  snapshotAuto(); meta=sc.meta; showLog(); rebuildSubject();
+  if(sc.type==="brush") prepBrush();
 }
 function demoTick(ts){
   if(!demo)return;
   if(!demoT0)demoT0=ts;
-  var t=((ts-demoT0)/1000)%9.2,p;
-  if(t<1.4)p=0; else if(t<4.6)p=ease((t-1.4)/3.2); else if(t<8)p=1; else p=1-ease((t-8)/1.2);
-  demoDraw(p); requestAnimationFrame(demoTick);
+  var t=(ts-demoT0)/1000, sc=scenes[sceneI], dur=sc.type==="sweep"?9.2:11;
+  if(t>=dur){ loadScene((sceneI+1)%scenes.length); sc=scenes[sceneI]; demoT0=ts; t=0 }
+  if(sc.type==="sweep"){ var p; if(t<1.4)p=0; else if(t<4.6)p=ease((t-1.4)/3.2); else if(t<8)p=1; else p=1-ease((t-8)/1.2); sweepDraw(p) }
+  else brushDraw(t);
+  requestAnimationFrame(demoTick);
 }
 function startDemo(){
-  demo=true; demoT0=0; rebuildSubject();
-  if(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches) demoDraw(.5);   // still frame, split down the middle
+  demo=true; demoT0=0; setGhost(false); loadScene(0);
+  if(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches) sweepDraw(.5);   // still frame, split down the middle
   else requestAnimationFrame(demoTick);
 }
-function stopDemo(){ if(!demo)return; demo=false; setGhost(false); render() }
+// ending the demo leaves the example on screen, fully sanitized and ready to edit
+function stopDemo(){ demoOff=true; if(!demo)return; demo=false; setGhost(false); render() }
 function render(){ if(demo||raf)return; raf=requestAnimationFrame(function(){raf=0;rebuildSubject();paint(sctx,ghost)}) }
 function setImage(w,h){ [stage,orig,mask,subj].forEach(function(c){size(c,w,h)}); stage.style.maxWidth="calc(70vh * "+(w/h).toFixed(4)+")"; undoStack=[]; $("undo").disabled=true }
 function snapshotAuto(){ autoMask=document.createElement("canvas"); size(autoMask,mask.width,mask.height); autoMask.getContext("2d").drawImage(mask,0,0) }
@@ -388,7 +442,7 @@ function openFile(file){
 }
 
 /* ---------- brush ---------- */
-var HOW={off:"Brush is off. Choose Keep or Hide, then drag your finger or mouse across the photo.",
+var HOW={off:"Brush is off. Choose Keep or Hide, then drag across the photo. Keep all brings the whole photo back, so you can hide only the giveaways.",
   keep:"Keep is on. Drag across the photo to bring back anything the cutout removed. Removed areas show faintly so you can find them.",
   hide:"Hide is on. Drag across the photo to erase anything still showing."};
 var cur=$("cursor"), curT=0;
@@ -419,6 +473,12 @@ $("size").addEventListener("input",function(){var r=stage.getBoundingClientRect(
 $("ghost").addEventListener("change",function(e){ghost=e.target.checked;render()});
 $("undo").addEventListener("click",function(){var d=undoStack.pop();if(d)mask.getContext("2d").putImageData(d,0,0);$("undo").disabled=!undoStack.length;render()});
 $("reset").addEventListener("click",function(){if(!autoMask)return;var m=mask.getContext("2d");m.clearRect(0,0,mask.width,mask.height);m.drawImage(autoMask,0,0);undoStack=[];$("undo").disabled=true;render()});
+
+$("keepall").addEventListener("click",function(){
+  var m=mask.getContext("2d");
+  undoStack.push(m.getImageData(0,0,mask.width,mask.height)); if(undoStack.length>5)undoStack.shift(); $("undo").disabled=false;
+  m.globalCompositeOperation="source-over"; m.fillStyle="#fff"; m.fillRect(0,0,mask.width,mask.height); render();
+});
 
 /* ---------- background ---------- */
 var COLORS=[["#000000","Black"],["#5E7482","Slate"],["#D8D2C2","Sand"],["#2F5D62","Kelp"],["#F2F4F5","White"]];
@@ -490,18 +550,17 @@ $("file").addEventListener("change",function(e){var f=e.target.files&&e.target.f
 /* ---------- start ---------- */
 meta={example:true,lat:44.8033,latR:"N",lon:124.065,lonR:"W",date:"2026:09:27 06:42:10",make:"Example",model:"Phone",name:"secret-pilings-sheepshead.jpg"};
 drawExample(); showLog(); setBrush("off"); setGhost(true); rebuildSubject(); paint(sctx,true);
-// swap the drawn placeholder for the real example photo and its cutout once both have loaded
-(function(){
-  var ph=new Image(), mk=new Image(), n=0;
+// swap the drawn placeholder for the real example photos once they have loaded
+function addScene(photo,maskFile,type,m,first){
+  var sc={ph:new Image(),mk:new Image(),type:type,meta:m}, n=0;
   function ready(){
-    if(++n<2||job>0)return;
-    setImage(ph.naturalWidth,ph.naturalHeight);
-    orig.getContext("2d").drawImage(ph,0,0);
-    mask.getContext("2d").drawImage(mk,0,0,mask.width,mask.height);
-    snapshotAuto(); setGhost(false); startDemo();
+    if(++n<2||demoOff||job>0)return;
+    if(first){scenes.unshift(sc); if(demo)sceneI++; else startDemo()} else scenes.push(sc);
   }
-  ph.onload=ready; mk.onload=ready; ph.src="example.jpg"; mk.src="example-mask.png";
-})();
+  sc.ph.onload=ready; sc.mk.onload=ready; sc.ph.src=photo; sc.mk.src=maskFile;
+}
+addScene("example.jpg","example-mask.png","sweep",meta,true);
+addScene("surf.jpg","surf-mask.png","brush",{example:true,lat:13.8421,latR:"S",lon:171.7513,lonR:"W",date:"2026:08:14 07:05:52",make:"Example",model:"Phone",name:"secret-reef-barrel.jpg"},false);
 // touching any control ends the demo and hands over the example for editing
 var side=document.querySelector(".side");
 ["pointerdown","keydown"].forEach(function(n){side.addEventListener(n,stopDemo,true)});
