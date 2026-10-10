@@ -174,7 +174,7 @@ var orig=document.createElement("canvas");      // original pixels, never export
 var mask=document.createElement("canvas");      // alpha = keep
 var subj=document.createElement("canvas");      // original clipped by mask
 var autoMask=null, undoStack=[];
-var bg="#5E7482", brush="off", ghost=false, meta={example:true}, session=null, engine="loading";
+var bg="#000000", brush="off", ghost=false, meta={example:true}, session=null, engine="loading";
 
 /* ---------- metadata reader (JPEG EXIF) ---------- */
 function readExif(buf){
@@ -241,13 +241,44 @@ function rebuildSubject(){
 function paint(ctx,withGhost){
   var w=orig.width,h=orig.height;
   ctx.globalAlpha=1; ctx.fillStyle=bg; ctx.fillRect(0,0,w,h);
-  var g=ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,"rgba(255,255,255,.14)"); g.addColorStop(1,"rgba(0,0,0,.10)");
-  ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  if(bg!=="#000000"){ // a blackout stays pure black; colours get a slight studio falloff
+    var g=ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,"rgba(255,255,255,.14)"); g.addColorStop(1,"rgba(0,0,0,.10)");
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  }
   if(withGhost){ctx.globalAlpha=.3;ctx.drawImage(orig,0,0);ctx.globalAlpha=1}
   ctx.drawImage(subj,0,0);
 }
 var raf=0;
-function render(){ if(raf)return; raf=requestAnimationFrame(function(){raf=0;rebuildSubject();paint(sctx,ghost)}) }
+/* ---------- example: a bar sweeps across the photo, leaving the sanitized version behind it ---------- */
+var demo=false, demoT0=0;
+function ease(x){return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2}
+function demoDraw(p){
+  var w=orig.width,h=orig.height,x=Math.round(p*w),c=sctx;
+  paint(c,false);
+  if(x<w){c.save();c.beginPath();c.rect(x,0,w-x,h);c.clip();c.drawImage(orig,0,0);c.restore()}
+  var fs=Math.max(13,Math.round(h*.02)),pad=fs*.6; c.font="500 "+fs+"px "+getComputedStyle(document.body).getPropertyValue("--mono");c.textBaseline="middle";
+  function chip(t,cx,right){var tw=c.measureText(t).width,bw=tw+pad*2,bx=right?cx-bw:cx,by=h-fs*2.6;c.fillStyle="rgba(0,0,0,.72)";c.fillRect(bx,by,bw,fs*1.9);c.fillStyle="#fff";c.fillText(t,bx+pad,by+fs*.98)}
+  c.save();
+  if(x>w*.3){c.beginPath();c.rect(0,0,x,h);c.clip();chip("SANITIZED",fs,false)}
+  c.restore();c.save();
+  if(x<w*.7){c.beginPath();c.rect(x,0,w-x,h);c.clip();chip("ORIGINAL",w-fs,true)}
+  c.restore();
+  if(p>0&&p<1){var bw=Math.max(4,Math.round(w*.007));c.save();c.shadowColor="rgba(255,255,255,.9)";c.shadowBlur=bw*4;c.fillStyle="#fff";c.fillRect(x-bw/2,0,bw,h);c.restore()}
+}
+function demoTick(ts){
+  if(!demo)return;
+  if(!demoT0)demoT0=ts;
+  var t=((ts-demoT0)/1000)%9.2,p;
+  if(t<1.4)p=0; else if(t<4.6)p=ease((t-1.4)/3.2); else if(t<8)p=1; else p=1-ease((t-8)/1.2);
+  demoDraw(p); requestAnimationFrame(demoTick);
+}
+function startDemo(){
+  demo=true; demoT0=0; rebuildSubject();
+  if(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches) demoDraw(.5);   // still frame, split down the middle
+  else requestAnimationFrame(demoTick);
+}
+function stopDemo(){ if(!demo)return; demo=false; setGhost(false); render() }
+function render(){ if(demo||raf)return; raf=requestAnimationFrame(function(){raf=0;rebuildSubject();paint(sctx,ghost)}) }
 function setImage(w,h){ [stage,orig,mask,subj].forEach(function(c){size(c,w,h)}); stage.style.maxWidth="calc(70vh * "+(w/h).toFixed(4)+")"; undoStack=[]; $("undo").disabled=true }
 function snapshotAuto(){ autoMask=document.createElement("canvas"); size(autoMask,mask.width,mask.height); autoMask.getContext("2d").drawImage(mask,0,0) }
 
@@ -321,6 +352,7 @@ function decode(file){
 function viaImg(file){return new Promise(function(ok,no){var u=URL.createObjectURL(file),im=new Image();im.onload=function(){ok(im);setTimeout(function(){URL.revokeObjectURL(u)},1000)};im.onerror=function(){URL.revokeObjectURL(u);no(new Error("decode"))};im.src=u})}
 var job=0;
 function openFile(file){
+  stopDemo();
   var me=++job;
   setStatus("Reading the photo…"); $("outwrap").hidden=true; $("savestatus").textContent="";
   meta={name:file.name}; showLog();
@@ -389,7 +421,7 @@ $("undo").addEventListener("click",function(){var d=undoStack.pop();if(d)mask.ge
 $("reset").addEventListener("click",function(){if(!autoMask)return;var m=mask.getContext("2d");m.clearRect(0,0,mask.width,mask.height);m.drawImage(autoMask,0,0);undoStack=[];$("undo").disabled=true;render()});
 
 /* ---------- background ---------- */
-var COLORS=[["#5E7482","Slate"],["#D8D2C2","Sand"],["#2F5D62","Kelp"],["#F2F4F5","White"],["#14181C","Black"]];
+var COLORS=[["#000000","Black"],["#5E7482","Slate"],["#D8D2C2","Sand"],["#2F5D62","Kelp"],["#F2F4F5","White"]];
 COLORS.forEach(function(c,i){
   var b=document.createElement("button"); b.type="button"; b.className="sw"; b.id="sw-"+i; b.style.background=c[0];
   b.setAttribute("aria-label",c[1]+" background"); b.setAttribute("aria-pressed",String(i===0));
@@ -456,8 +488,24 @@ $("file").addEventListener("click",function(e){e.target.value=""});
 $("file").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f)openFile(f)});
 
 /* ---------- start ---------- */
-meta={example:true,lat:44.8033,latR:"N",lon:124.065,lonR:"W",date:"2026:09:27 06:42:10",make:"Example",model:"Phone",name:"secret-jetty-coho.jpg"};
+meta={example:true,lat:44.8033,latR:"N",lon:124.065,lonR:"W",date:"2026:09:27 06:42:10",make:"Example",model:"Phone",name:"secret-pilings-sheepshead.jpg"};
 drawExample(); showLog(); setBrush("off"); setGhost(true); rebuildSubject(); paint(sctx,true);
+// swap the drawn placeholder for the real example photo and its cutout once both have loaded
+(function(){
+  var ph=new Image(), mk=new Image(), n=0;
+  function ready(){
+    if(++n<2||job>0)return;
+    setImage(ph.naturalWidth,ph.naturalHeight);
+    orig.getContext("2d").drawImage(ph,0,0);
+    mask.getContext("2d").drawImage(mk,0,0,mask.width,mask.height);
+    snapshotAuto(); setGhost(false); startDemo();
+  }
+  ph.onload=ready; mk.onload=ready; ph.src="example.jpg"; mk.src="example-mask.png";
+})();
+// touching any control ends the demo and hands over the example for editing
+var side=document.querySelector(".side");
+["pointerdown","keydown"].forEach(function(n){side.addEventListener(n,stopDemo,true)});
+stage.addEventListener("pointerdown",stopDemo,true);
 var enginePromise=loadEngine().then(function(){
   if(engine==="ready")setStatus("Ready. Choose a photo to try it on your own.","ok");
   else setStatus("Automatic cutout isn't available here. You can still paint the cutout by hand.","warn");
