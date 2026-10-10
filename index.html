@@ -548,6 +548,10 @@ $("file").addEventListener("click",function(e){e.target.value=""});
 $("file").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];if(f)openFile(f)});
 
 /* ---------- start ---------- */
+// always open at the top, even on a refresh (browsers otherwise return to where you had scrolled)
+try{ if("scrollRestoration" in history) history.scrollRestoration="manual" }catch(e){}
+function toTop(){ try{ window.scrollTo(0,0) }catch(e){} }
+toTop(); window.addEventListener("pageshow",toTop); window.addEventListener("load",toTop);
 meta={example:true,lat:44.8033,latR:"N",lon:124.065,lonR:"W",date:"2026:09:27 06:42:10",make:"Example",model:"Phone",name:"secret-pilings-sheepshead.jpg"};
 drawExample(); showLog(); setBrush("off"); setGhost(true); rebuildSubject(); paint(sctx,true);
 // swap the drawn placeholder for the real example photos once they have loaded
